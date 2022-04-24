@@ -6,6 +6,7 @@ from typing import Callable, List, Optional
 from pathlib import Path
 import pandas as pd
 import imagehash
+import shutil
 import sqlite3
 import os
 
@@ -74,6 +75,17 @@ def calc_phashes(base_path: Path, names: List[str], workers: int):
         return list(tqdm(pool.imap(run_unpack, params, chunksize=5), total=len(names)))
 
 
+def copy_files(df, base_in: Path, base_out: Path):
+    total = df.shape[0]
+    for i, x in tqdm(df.iterrows(), total=total):
+        f = x["hash"]
+        subdir = x["label"]
+        a = base_in / f
+        b = base_out / subdir / f"{f}.jpg"
+        b.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(a, b)
+
+
 def get_args():
     parser = ArgumentParser()
     parser.add_argument(
@@ -100,11 +112,11 @@ def get_args():
         help="add phash column to csv file",
     )
     parser.add_argument(
-        "--cache",
+        "-o",
         required=False,
-        dest="cache_folder",
-        type=str,
-        help="path to cache folder",
+        dest="output_dir",
+        type=Path,
+        help="path to output directory",
     )
     return parser.parse_args()
 
@@ -121,13 +133,25 @@ if __name__ == "__main__":
     names = list(df['hash'])
     print(f"Found {len(names)} items")
 
+    if args.output_dir:
+        output_path = args.output_dir.expanduser()
+    else:
+        output_path = Path('.')
+    if not output_path.is_dir():
+        print(f"Output is not a directory")
+        exit(1)
+    output_path.mkdir(parents=True, exist_ok=True)
+
     try:
         if args.phash:
             n = args.workers if args.workers else cpu_count()
             print(f'Using {n} workers to calculate phash')
             phash = calc_phashes(blob_path, names, workers=n)
             df['phash'] = phash
-        df.to_csv(f'lobe-{project}_export.csv', index=False)
+        print(f'Copy files')
+        copy_files(df, base_in=blob_path, base_out=output_path)
+        csv_filename = f'lobe-{project}.csv'
+        df.to_csv(output_path / csv_filename, index=False)
     except KeyboardInterrupt:
         exit()
 
