@@ -1,4 +1,4 @@
-from argparse import ArgumentParser
+from argparse import ArgumentParser, BooleanOptionalAction
 from multiprocessing import cpu_count, Pool
 from tqdm import tqdm
 from PIL import Image
@@ -26,11 +26,6 @@ def read_db(path: Path):
         join example_labels l on i.example_id = l.example_id
         join example_metrics m on i.example_id = m.example_id
         join examples e on i.example_id = e.example_id
-        where 
-            1=1
-            --     and m.accuracy > 0.95
-            --     and l."label" = 'like'
-            --     and e.item_set = 0
         order by l.modified
         ;
     """
@@ -96,6 +91,15 @@ def get_args():
         help="amount of workers",
     )
     parser.add_argument(
+        "--phash",
+        required=False,
+        default=False,
+        dest="phash",
+        action=BooleanOptionalAction,
+        type=int,
+        help="add phash column to csv file",
+    )
+    parser.add_argument(
         "--cache",
         required=False,
         dest="cache_folder",
@@ -118,10 +122,11 @@ if __name__ == "__main__":
     print(f"Found {len(names)} items")
 
     try:
-        n = args.workers if args.workers else cpu_count()
-        print(f'Using {n} workers to calculate phash')
-        phash = calc_phashes(blob_path, names, workers=n)
-        df['phash'] = phash
+        if args.phash:
+            n = args.workers if args.workers else cpu_count()
+            print(f'Using {n} workers to calculate phash')
+            phash = calc_phashes(blob_path, names, workers=n)
+            df['phash'] = phash
         df.to_csv(f'lobe-{project}_export.csv', index=False)
     except KeyboardInterrupt:
         exit()
